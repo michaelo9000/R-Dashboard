@@ -4,31 +4,66 @@ library(lattice)
 library(MASS)
 
 ui <- fluidPage(
-  plotOutput("score", width="100%"),
-  plotOutput("totalTimeHist", width="50%"),
-  plotOutput("questionTotal", width="50%"),
-  plotOutput("questionTime", width="50%"),
-  plotOutput("touchRate", width="50%")
+  #barplot options
+  selectInput("dataSelect", "Select the parameter to plot", 
+               choices=c("Score"=1, 
+                         "Total Time"=2, 
+                         "Total Touches"=3, 
+                         "Rate of Touches"=4, 
+                         "Questions Answered"=5, 
+                         "Question Time"=6)),
+  #barplot
+  plotOutput("barplot"),
+  #display timelines
+  uiOutput("plots")
 )
 
 server <- function(input, output) {
   #loop checks how many data files exist
-  totalFiles <- 0
-  for (i in 1:9){
+  for (i in 1:99){
     fileName <- paste("data\\data",i,".csv", sep="")
     if (!file.exists(fileName)){break}
     else {totalFiles <- i}
   }
+  #something
+  output$plots <- renderUI({
+    plot_output_list <- lapply(1:totalFiles, function(i) {
+      plotName <- paste("timeline", i, sep="")
+      plotOutput(plotName, width="100%", height="150px")
+    })
+    do.call(tagList, plot_output_list)
+  })
   #loop produces timelines for each data file
-  
-  #histograms of summary file columns
   fulldf <- read.csv("data\\summary.csv")
-  output$score <- renderPlot(hist(fulldf$score, main="Score Ratings", xlab="Score", xlim=c(0,2), col="red"))
-  output$totalTimeHist <- renderPlot(hist(fulldf$totalTime, main="Total Time Using the App", xlab="Minutes", xlim=c(0,2), col="red"))
-  output$questionTotal <- renderPlot(hist(fulldf$questionTotal, main="Total Questions Answered", xlab="Number of Questions", xlim=c(0,10), col="red"))
-  output$questionTime <- renderPlot(hist(fulldf$questionTime, main="Average Time to Answer a Question", xlab="Seconds", xlim=c(10,20), col="red"))
-  output$touchRate <- renderPlot(hist(fulldf$touchRate, main="Average Touches per Minute", xlab="# of Touches/Minute", xlim=c(20,40), col="red"))
-  
+  for (i in 1:totalFiles){
+    local({
+      localI <- i
+      fileName <- paste("data\\data",localI,".csv", sep="")
+      df <- read.csv(fileName)
+      score <- round(fulldf$score[localI], digits=2)
+      plotName <- paste("timeline",localI,sep="")
+      output[[plotName]] <- renderPlot ({df$question <- as.factor(df$question)
+        plot(c(df$touchStart[1], tail(df$touchEnd,1)), c(0.4,0.65), 
+           type='n', xlab=paste("File: data",localI,".csv. Time-weighted Score: ",score,sep=""), ylab='', axes=FALSE)	 
+        for(n in 1:nrow(df)){
+          polygon(x=c(rep(df$touchStart[n],2), rep(df$touchEnd[n],2)), 
+                  y=c(0.6,0.4,0.4,0.6), col=rainbow(10,alpha=0.5)[df$question[n]],
+                  border=rainbow(10)[df$question[n]])
+        }
+        axis(1, labels=df$touchEnd, at=df$touchEnd)
+      })
+    })
+  }
+  #histograms of summary file columns
+  observeEvent(input$dataSelect,{
+    if (input$dataSelect == 1){data <- fulldf$score}
+    else if (input$dataSelect == 2){data <- fulldf$totalTime}
+    else if (input$dataSelect == 3){data <- fulldf$totalTouches}
+    else if (input$dataSelect == 4){data <- fulldf$touchRate}
+    else if (input$dataSelect == 5){data <- fulldf$questionTotal}
+    else {data <- fulldf$questionTime}
+    output$barplot <- renderPlot(barplot(data, names.arg=c(1:totalFiles), main="", xlab="Participant #", col=rainbow(10)))
+  })
 }
 
 shinyApp(ui = ui, server = server)
